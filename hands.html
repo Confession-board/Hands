@@ -3,64 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Landscape Hand Tracking Portal</title>
+    <title>Connected Hands Portal</title>
     
-    <!-- Import MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
         body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
+            margin: 0; padding: 0; background-color: #000;
+            display: flex; justify-content: center; align-items: center;
+            width: 100vw; height: 100vh; overflow: hidden; font-family: monospace;
         }
         
-        .input_video {
-            display: none; 
+        .input_video { display: none; }
+        
+        /* Stretches the camera feed to cover the screen perfectly */
+        .output_canvas {
+            width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); 
         }
 
-        /* Forces the canvas to fill the screen while maintaining a landscape aspect ratio */
-        .output_canvas {
-            width: 100%;
-            height: 100%;
-            object-fit: cover; 
-            transform: scaleX(-1); /* Mirrors the camera horizontally */
-        }
-        
-        /* On-screen UI Portal Overlay */
         .portal-header {
-            position: absolute;
-            top: 15px;
-            left: 20px;
-            color: #00FF00;
-            font-family: monospace;
-            font-size: 18px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            z-index: 10;
+            position: absolute; top: 15px; left: 20px; color: #00FF00;
+            font-size: 18px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10;
         }
     </style>
 </head>
 <body>
 
-    <div class="portal-header">🟢 PORTAL ACTIVE // LANDSCAPE MODE</div>
+    <div class="portal-header">🔗 CONNECTION MODE ACTIVE</div>
 
     <video class="input_video" playsinline></video>
     <canvas class="output_canvas" width="1280" height="720"></canvas>
 
     <script>
-        // Attempt to force the phone into landscape mode automatically
+        // Attempt to lock orientation (may require manual rotation depending on the browser)
         if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch((error) => {
-                console.log("Device doesn't support auto-locking orientation. Please rotate your phone manually.");
-            });
+            screen.orientation.lock('landscape').catch(() => console.log("Please rotate phone manually"));
         }
 
         const videoElement = document.querySelector('.input_video');
@@ -70,40 +49,65 @@
         function onResults(results) {
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            
-            // Draw the camera feed
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
             
-            // Draw the tracking dots and lines
             if (results.multiHandLandmarks) {
+                // Draw normal dots on fingers
                 for (const landmarks of results.multiHandLandmarks) {
-                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-                    drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 2, radius: 4});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 1, radius: 2});
+                }
+
+                // Connect two hands if exactly 2 hands are on screen
+                if (results.multiHandLandmarks.length === 2) {
+                    const hand1 = results.multiHandLandmarks[0];
+                    const hand2 = results.multiHandLandmarks[1];
+                    const w = canvasElement.width, h = canvasElement.height;
+
+                    // Get coordinates for Index fingers (8) and Thumbs (4)
+                    const h1_index = { x: hand1[8].x * w, y: hand1[8].y * h };
+                    const h1_thumb = { x: hand1[4].x * w, y: hand1[4].y * h };
+                    const h2_index = { x: hand2[8].x * w, y: hand2[8].y * h };
+                    const h2_thumb = { x: hand2[4].x * w, y: hand2[4].y * h };
+
+                    // Draw the custom connecting shape
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(h1_index.x, h1_index.y);
+                    canvasCtx.lineTo(h2_index.x, h2_index.y);
+                    canvasCtx.lineTo(h2_thumb.x, h2_thumb.y);
+                    canvasCtx.lineTo(h1_thumb.x, h1_thumb.y);
+                    canvasCtx.closePath();
+
+                    // Style for the lines connecting the hands
+                    canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // White lines
+                    canvasCtx.lineWidth = 3;
+                    canvasCtx.stroke();
+                    
+                    // Faint fill inside the connected shape
+                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    canvasCtx.fill();
                 }
             }
             canvasCtx.restore();
         }
 
+        // Initialize MediaPipe Hands
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
         
         hands.setOptions({
-            maxNumHands: 2,
+            maxNumHands: 2, 
             modelComplexity: 1,
-            minDetectionConfidence: 0.5,
+            minDetectionConfidence: 0.5, 
             minTrackingConfidence: 0.5
         });
         
         hands.onResults(onResults);
 
-        // Setting width to 1280 and height to 720 forces the camera to capture in a landscape ratio
+        // Start camera automatically
         const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 1280,
-            height: 720
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 1280, height: 720
         });
         
         camera.start();
