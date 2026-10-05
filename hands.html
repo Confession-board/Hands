@@ -17,7 +17,7 @@
         video { display: none; }
         canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
         
-        /* Flash & Countdown Overlays */
+        /* Overlays */
         #flash-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; pointer-events: none; z-index: 200;
@@ -26,12 +26,11 @@
 
         #countdown-overlay {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 80px; font-weight: bold; color: #ff00ff;
+            font-size: 100px; font-weight: bold; color: #ff00ff;
             text-shadow: 0 0 20px #ff00ff, 0 0 40px #ffffff;
             z-index: 150; pointer-events: none; display: none;
         }
 
-        /* Tap to Start Overlay */
         #start-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
@@ -44,7 +43,7 @@
             cursor: pointer; margin-top: 20px; font-family: monospace;
         }
         
-        /* Top Status Bar */
+        /* UI Status Bar */
         #ui-bar {
             position: absolute; top: 15px; left: 15px; right: 15px;
             display: flex; justify-content: space-between; align-items: center;
@@ -53,17 +52,17 @@
         #status-container { display: flex; flex-direction: column; gap: 4px; }
         #status {
             color: #ff00ff; font-size: 13px; text-shadow: 0 0 8px #ff00ff;
-            background: rgba(0, 0, 0, 0.7); padding: 8px 12px; border-radius: 8px;
+            background: rgba(0, 0, 0, 0.75); padding: 8px 12px; border-radius: 8px;
         }
         #gesture-status {
             color: #00ffff; font-size: 11px; text-shadow: 0 0 6px #00ffff;
-            background: rgba(0, 0, 0, 0.7); padding: 4px 8px; border-radius: 6px; width: fit-content;
+            background: rgba(0, 0, 0, 0.75); padding: 4px 8px; border-radius: 6px; width: fit-content;
         }
 
-        /* Color Picker Buttons */
+        /* Color Controls */
         .color-picker {
             display: flex; gap: 8px; pointer-events: auto;
-            background: rgba(0, 0, 0, 0.7); padding: 6px 10px; border-radius: 20px;
+            background: rgba(0, 0, 0, 0.75); padding: 6px 10px; border-radius: 20px;
         }
         .color-btn {
             width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
@@ -79,7 +78,7 @@
 
         <div id="ui-bar">
             <div id="status-container">
-                <div id="status">🟣 READY - BRING HANDS</div>
+                <div id="status">🟣 INITIALIZING TRACKING...</div>
                 <div id="gesture-status">👁️ BLINK = SHOT (2s) | 🤌 PINCH = CHANGE COLOR</div>
             </div>
             <div class="color-picker">
@@ -92,7 +91,7 @@
 
         <div id="start-overlay">
             <h2>Hand Portal</h2>
-            <p>• Touch <b>any fingers</b> to form portal<br>• <b>Blink eyes</b> to capture photo in 2s<br>• <b>Close/pinch fingers</b> on one hand to change color</p>
+            <p>• Touch <b>ANY finger tips</b> together to open portal<br>• <b>Blink eyes</b> to trigger 2s photo countdown<br>• <b>Pinch thumb + index</b> on one hand to cycle color</p>
             <button id="start-btn">START CAMERA</button>
         </div>
 
@@ -111,7 +110,7 @@
         const flashOverlay = document.getElementById('flash-overlay');
         const countdownOverlay = document.getElementById('countdown-overlay');
 
-        // Color Variants
+        // Theme Definitions
         const themeKeys = ['neon', 'deep', 'lavender', 'indigo'];
         let currentThemeIdx = 0;
 
@@ -125,6 +124,8 @@
 
         let isCountdownRunning = false;
         let lastThemeChangeTime = 0;
+        let latestFaceData = null;
+        let latestHandData = null;
 
         function setTheme(key) {
             currentTheme = themes[key];
@@ -135,12 +136,12 @@
 
         function cycleTheme() {
             const now = Date.now();
-            if (now - lastThemeChangeTime < 1200) return; // Debounce 1.2s
+            if (now - lastThemeChangeTime < 1500) return; // Cooldown 1.5s
             lastThemeChangeTime = now;
 
             currentThemeIdx = (currentThemeIdx + 1) % themeKeys.length;
             setTheme(themeKeys[currentThemeIdx]);
-            gestureStatusElem.innerText = `🎨 GESTURE: COLOR CHANGED TO ${currentTheme.name}`;
+            gestureStatusElem.innerText = `🎨 COLOR: ${currentTheme.name}`;
             setTimeout(() => {
                 gestureStatusElem.innerText = '👁️ BLINK = SHOT (2s) | 🤌 PINCH = CHANGE COLOR';
             }, 2000);
@@ -192,14 +193,14 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Initialize FaceMesh for Eye Blink Detection
+        // 1. Initialize FaceMesh
         const faceMesh = new FaceMesh({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
         });
 
         faceMesh.setOptions({
             maxNumFaces: 1,
-            refineLandmarks: false,
+            refineLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
@@ -207,19 +208,23 @@
         faceMesh.onResults((results) => {
             if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                 const face = results.multiFaceLandmarks[0];
-                
-                // Eyelid landmark distances (Right eye: 159 & 145, Left eye: 386 & 374)
-                const rightEyelidDist = Math.hypot(face[159].x - face[145].x, face[159].y - face[145].y);
-                const leftEyelidDist = Math.hypot(face[386].x - face[374].x, face[386].y - face[374].y);
 
-                // Blink threshold
-                if (rightEyelidDist < 0.018 && leftEyelidDist < 0.018) {
+                // Calculate Eye Aspect Ratio (EAR) for stable blink detection
+                const rVertical = Math.hypot(face[159].x - face[145].x, face[159].y - face[145].y);
+                const rHorizontal = Math.hypot(face[33].x - face[133].x, face[33].y - face[133].y);
+                const rightEAR = rVertical / (rHorizontal + 1e-6);
+
+                const lVertical = Math.hypot(face[386].x - face[374].x, face[386].y - face[374].y);
+                const lHorizontal = Math.hypot(face[362].x - face[263].x, face[362].y - face[263].y);
+                const leftEAR = lVertical / (lHorizontal + 1e-6);
+
+                if (rightEAR < 0.18 && leftEAR < 0.18) {
                     triggerCountdownCapture();
                 }
             }
         });
 
-        // Initialize MediaPipe Hands
+        // 2. Initialize MediaPipe Hands
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
@@ -231,56 +236,53 @@
             minTrackingConfidence: 0.5
         });
 
-        // Fingertip IDs: Thumb(4), Index(8), Middle(12), Ring(16), Pinky(20)
-        const FINGERTIPS = [4, 8, 12, 16, 20];
+        const FINGERTIPS = [4, 8, 12, 16, 20]; // Thumb, Index, Middle, Ring, Pinky
 
         hands.onResults((results) => {
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-            if (results.multiHandLandmarks) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 for (const landmarks of results.multiHandLandmarks) {
                     drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 1, radius: 2});
                     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 1});
 
-                    // Single-hand Pinch Gesture (Thumb tip 4 & Index tip 8 close together)
+                    // Pinch Gesture to Change Color (Thumb tip 4 & Index tip 8)
                     const pinchDist = Math.hypot(landmarks[4].x - landmarks[8].x, landmarks[4].y - landmarks[8].y);
-                    if (pinchDist < 0.04) {
+                    if (pinchDist < 0.045) {
                         cycleTheme();
                     }
                 }
 
-                // Check contacts across ANY finger between 2 hands
+                // Any-Finger Portal Connection Logic
                 if (results.multiHandLandmarks.length === 2) {
                     const hand1 = results.multiHandLandmarks[0];
                     const hand2 = results.multiHandLandmarks[1];
                     const w = canvasElement.width;
                     const h = canvasElement.height;
 
-                    let contactingPairs = [];
+                    let contacts = [];
 
-                    // Scan all 5 fingers against all 5 fingers of second hand
                     for (let f1 of FINGERTIPS) {
                         for (let f2 of FINGERTIPS) {
                             const dist = Math.hypot(hand1[f1].x - hand2[f2].x, hand1[f1].y - hand2[f2].y);
-                            if (dist < 0.12) { // Finger contact threshold
-                                contactingPairs.push({
-                                    p1: { x: hand1[f1].x * w, y: hand1[f1].y * h, id: f1 },
-                                    p2: { x: hand2[f2].x * w, y: hand2[f2].y * h, id: f2 }
+                            if (dist < 0.14) { // Touch threshold
+                                contacts.push({
+                                    p1: { x: hand1[f1].x * w, y: hand1[f1].y * h },
+                                    p2: { x: hand2[f2].x * w, y: hand2[f2].y * h }
                                 });
                             }
                         }
                     }
 
-                    if (contactingPairs.length > 0) {
+                    if (contacts.length > 0) {
                         statusElem.innerText = `🟣 PORTAL ACTIVE (${currentTheme.name})`;
 
                         canvasCtx.beginPath();
-
-                        if (contactingPairs.length === 1) {
-                            // If only 1 pair of fingers touch, use those fingertips + hand bases to form portal quad
-                            const pair = contactingPairs[0];
+                        if (contacts.length === 1) {
+                            // Single finger pair touching: Draw polygon down to hand bases
+                            const pair = contacts[0];
                             const base1 = { x: hand1[0].x * w, y: hand1[0].y * h };
                             const base2 = { x: hand2[0].x * w, y: hand2[0].y * h };
 
@@ -289,18 +291,11 @@
                             canvasCtx.lineTo(base2.x, base2.y);
                             canvasCtx.lineTo(base1.x, base1.y);
                         } else {
-                            // Multi-finger contact: Connect all active contact points across hands
-                            const p1_start = contactingPairs[0].p1;
-                            canvasCtx.moveTo(p1_start.x, p1_start.y);
-
-                            for (let pair of contactingPairs) {
-                                canvasCtx.lineTo(pair.p2.x, pair.p2.y);
-                            }
-                            for (let i = contactingPairs.length - 1; i >= 0; i--) {
-                                canvasCtx.lineTo(contactingPairs[i].p1.x, contactingPairs[i].p1.y);
-                            }
+                            // Multiple fingers touching: Build multi-point portal
+                            canvasCtx.moveTo(contacts[0].p1.x, contacts[0].p1.y);
+                            for (let c of contacts) canvasCtx.lineTo(c.p2.x, c.p2.y);
+                            for (let i = contacts.length - 1; i >= 0; i--) canvasCtx.lineTo(contacts[i].p1.x, contacts[i].p1.y);
                         }
-
                         canvasCtx.closePath();
 
                         // Render Portal Graphics
@@ -320,15 +315,25 @@
                 } else {
                     statusElem.innerText = "🟣 BRING 2 HANDS TO FRAME";
                 }
+            } else {
+                statusElem.innerText = "🟣 READY - SHOW HANDS";
             }
             canvasCtx.restore();
         });
 
-        // Frame Processing Loop
+        // Non-blocking concurrent processing lock
+        let isProcessing = false;
+
         async function processVideo() {
-            if (!videoElement.paused && !videoElement.ended) {
-                await hands.send({ image: videoElement });
-                await faceMesh.send({ image: videoElement });
+            if (!videoElement.paused && !videoElement.ended && !isProcessing) {
+                isProcessing = true;
+                try {
+                    await hands.send({ image: videoElement });
+                    await faceMesh.send({ image: videoElement });
+                } catch(e) {
+                    console.error("Frame process error:", e);
+                }
+                isProcessing = false;
             }
             requestAnimationFrame(processVideo);
         }
@@ -344,7 +349,7 @@
                 startOverlay.style.display = 'none';
                 processVideo();
             } catch (err) {
-                alert('Camera permission error: ' + err.message);
+                alert('Camera permission required: ' + err.message);
             }
         });
     </script>
