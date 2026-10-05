@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Connected Hands Portal</title>
+    <title>Purple Connected Hands Portal</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -23,16 +23,15 @@
         }
 
         .portal-header {
-            position: absolute; top: 15px; left: 20px; color: #00FF00;
+            position: absolute; top: 15px; left: 20px; color: #b400ff;
             font-size: 18px; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10;
         }
     </style>
 </head>
 <body>
 
-    <div class="portal-header">🔗 CONNECTION MODE ACTIVE</div>
+    <div class="portal-header">🟣 PURPLE PORTAL ACTIVE</div>
 
-    <!-- Added autoplay and muted to bypass mobile browser restrictions -->
     <video class="input_video" playsinline autoplay muted></video>
     <canvas class="output_canvas" width="1280" height="720"></canvas>
 
@@ -51,7 +50,7 @@
                     drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 1, radius: 2});
                 }
 
-                // Portal connection activates when 2 hands are detected
+                // Portal connection activates ONLY when exactly 2 hands are detected
                 if (results.multiHandLandmarks.length === 2) {
                     const hand1 = results.multiHandLandmarks[0];
                     const hand2 = results.multiHandLandmarks[1];
@@ -62,6 +61,10 @@
                     const h2_index = { x: hand2[8].x * w, y: hand2[8].y * h };
                     const h2_thumb = { x: hand2[4].x * w, y: hand2[4].y * h };
 
+                    // Add a neon glow effect
+                    canvasCtx.shadowColor = '#b400ff';
+                    canvasCtx.shadowBlur = 15;
+
                     // Draw the portal shape
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(h1_index.x, h1_index.y);
@@ -70,12 +73,17 @@
                     canvasCtx.lineTo(h1_thumb.x, h1_thumb.y);
                     canvasCtx.closePath();
 
-                    canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    // Solid purple borders
+                    canvasCtx.strokeStyle = 'rgba(180, 0, 255, 0.9)';
                     canvasCtx.lineWidth = 3;
                     canvasCtx.stroke();
                     
-                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    // Transparent purple fill inside
+                    canvasCtx.fillStyle = 'rgba(180, 0, 255, 0.3)';
                     canvasCtx.fill();
+                    
+                    // Reset shadow so it doesn't affect other drawings next frame
+                    canvasCtx.shadowBlur = 0;
                 }
             }
             canvasCtx.restore();
