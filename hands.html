@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hand Portal</title>
+    <title>Purple Hand Portal</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -16,26 +16,27 @@
         video { display: none; }
         canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
         
-        /* Camera Flash Effect */
+        /* Camera Flash Overlay */
         #flash-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; pointer-events: none; z-index: 200;
             transition: opacity 0.2s ease-out;
         }
 
-        /* Tap to start screen */
+        /* Tap to Start Overlay */
         #start-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: #fff; text-align: center;
+            padding: 20px;
         }
         #start-btn {
             padding: 16px 32px; font-size: 18px; font-weight: bold; background: #ff00ff;
             color: #fff; border: none; border-radius: 30px; box-shadow: 0 0 15px #ff00ff;
-            cursor: pointer; margin-top: 15px; font-family: monospace;
+            cursor: pointer; margin-top: 20px; font-family: monospace;
         }
         
-        /* UI Status & Voice Indicator */
+        /* Top Status Bar */
         #ui-bar {
             position: absolute; top: 15px; left: 15px; right: 15px;
             display: flex; justify-content: space-between; align-items: center;
@@ -43,21 +44,33 @@
         }
         #status-container { display: flex; flex-direction: column; gap: 4px; }
         #status {
-            color: #ff00ff; font-size: 14px; text-shadow: 0 0 8px #ff00ff;
-            background: rgba(0, 0, 0, 0.6); padding: 8px 12px; border-radius: 8px;
+            color: #ff00ff; font-size: 13px; text-shadow: 0 0 8px #ff00ff;
+            background: rgba(0, 0, 0, 0.7); padding: 8px 12px; border-radius: 8px;
         }
         #voice-status {
             color: #00ffff; font-size: 11px; text-shadow: 0 0 6px #00ffff;
-            background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 6px; width: fit-content;
+            background: rgba(0, 0, 0, 0.7); padding: 4px 8px; border-radius: 6px; width: fit-content;
         }
+
+        /* Bottom Control Buttons (Backup for Mobile) */
+        #controls-bar {
+            position: absolute; bottom: 20px; display: flex; gap: 15px; z-index: 10;
+        }
+        .action-btn {
+            padding: 12px 20px; font-size: 14px; font-weight: bold; font-family: monospace;
+            background: rgba(0, 0, 0, 0.75); color: #fff; border: 2px solid #ff00ff;
+            border-radius: 25px; cursor: pointer; backdrop-filter: blur(4px);
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+        }
+        .action-btn:active { transform: scale(0.95); background: #ff00ff; }
 
         /* Color Picker Buttons */
         .color-picker {
             display: flex; gap: 8px; pointer-events: auto;
-            background: rgba(0, 0, 0, 0.6); padding: 6px 10px; border-radius: 20px;
+            background: rgba(0, 0, 0, 0.7); padding: 6px 10px; border-radius: 20px;
         }
         .color-btn {
-            width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff;
+            width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
             cursor: pointer; transition: transform 0.2s;
         }
         .color-btn:active { transform: scale(1.2); }
@@ -70,7 +83,7 @@
         <div id="ui-bar">
             <div id="status-container">
                 <div id="status">🟣 READY - BRING 2 HANDS</div>
-                <div id="voice-status">🗣️ VOICE: SAY "SHOT" OR "CHANGE"</div>
+                <div id="voice-status">🗣️ VOICE OR TAP CONTROLS READY</div>
             </div>
             <div class="color-picker">
                 <div class="color-btn" style="background: #ff00ff;" onclick="setTheme('neon')"></div>
@@ -80,10 +93,16 @@
             </div>
         </div>
 
+        <!-- On-Screen Controls for instant tap fallback -->
+        <div id="controls-bar">
+            <button class="action-btn" onclick="takeSnapshot()">📸 SHOT</button>
+            <button class="action-btn" onclick="cycleTheme()">🎨 CHANGE COLOR</button>
+        </div>
+
         <div id="start-overlay">
-            <h2>Couples Portal</h2>
-            <p>Say <b>"SHOT"</b> to take photo | Say <b>"CHANGE"</b> for colors</p>
-            <button id="start-btn">ENABLE CAMERA & MIC</button>
+            <h2>Hand Portal</h2>
+            <p>Touch fingers together to open the portal.<br>Say <b>"SHOT"</b> / <b>"CHANGE"</b> or use the screen buttons.</p>
+            <button id="start-btn">ALLOW CAMERA & MIC</button>
         </div>
 
         <video id="webcam" playsinline autoplay muted></video>
@@ -100,7 +119,7 @@
         const voiceStatusElem = document.getElementById('voice-status');
         const flashOverlay = document.getElementById('flash-overlay');
 
-        // Color Themes
+        // Purple Variants
         const themeKeys = ['neon', 'deep', 'lavender', 'indigo'];
         let currentThemeIdx = 0;
 
@@ -122,66 +141,66 @@
         function cycleTheme() {
             currentThemeIdx = (currentThemeIdx + 1) % themeKeys.length;
             setTheme(themeKeys[currentThemeIdx]);
-            voiceStatusElem.innerText = `🎨 CHANGED TO: ${currentTheme.name}`;
+            voiceStatusElem.innerText = `🎨 COLOR: ${currentTheme.name}`;
             setTimeout(() => {
-                voiceStatusElem.innerText = '🗣️ VOICE: SAY "SHOT" OR "CHANGE"';
+                voiceStatusElem.innerText = '🗣️ VOICE OR TAP CONTROLS READY';
             }, 2500);
         }
 
-        // Take Picture Action
         function takeSnapshot() {
-            // Screen Flash
             flashOverlay.style.opacity = '1';
             setTimeout(() => { flashOverlay.style.opacity = '0'; }, 200);
 
             voiceStatusElem.innerText = "📸 SNAPSHOT CAPTURED!";
 
-            // Generate Download Link
             const image = canvasElement.toDataURL("image/png");
             const link = document.createElement('a');
-            link.download = `couples-portal-${Date.now()}.png`;
+            link.download = `hand-portal-${Date.now()}.png`;
             link.href = image;
             link.click();
 
             setTimeout(() => {
-                voiceStatusElem.innerText = '🗣️ VOICE: SAY "SHOT" OR "CHANGE"';
+                voiceStatusElem.innerText = '🗣️ VOICE OR TAP CONTROLS READY';
             }, 2500);
         }
 
-        // Voice Recognition Setup
+        // Voice Recognition Initialization
         function initVoiceCommands() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                voiceStatusElem.innerText = "⚠️ VOICE NOT SUPPORTED ON THIS BROWSER";
+                voiceStatusElem.innerText = "👉 USE ON-SCREEN BUTTONS BELOW";
                 return;
             }
 
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
+            try {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
 
-            recognition.onresult = (event) => {
-                const lastIdx = event.results.length - 1;
-                const command = event.results[lastIdx][0].transcript.trim().toLowerCase();
+                recognition.onresult = (event) => {
+                    const lastIdx = event.results.length - 1;
+                    const command = event.results[lastIdx][0].transcript.trim().toLowerCase();
 
-                if (command.includes('shot') || command.includes('shoot') || command.includes('snap')) {
-                    takeSnapshot();
-                } else if (command.includes('change') || command.includes('switch') || command.includes('color')) {
-                    cycleTheme();
-                }
-            };
+                    if (command.includes('shot') || command.includes('shoot') || command.includes('snap')) {
+                        takeSnapshot();
+                    } else if (command.includes('change') || command.includes('switch') || command.includes('color')) {
+                        cycleTheme();
+                    }
+                };
 
-            recognition.onerror = (err) => {
-                console.log("Voice err:", err);
-            };
+                recognition.onerror = () => {
+                    voiceStatusElem.innerText = "👉 USE ON-SCREEN BUTTONS BELOW";
+                };
 
-            recognition.onend = () => {
-                // Keep microphone active continuously
-                try { recognition.start(); } catch(e) {}
-            };
+                recognition.onend = () => {
+                    try { recognition.start(); } catch(e) {}
+                };
 
-            try { recognition.start(); } catch(e) {}
+                recognition.start();
+            } catch(e) {
+                voiceStatusElem.innerText = "👉 USE ON-SCREEN BUTTONS BELOW";
+            }
         }
 
         function resizeCanvas() {
@@ -191,7 +210,6 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Optimized MediaPipe Tracking
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
@@ -225,20 +243,21 @@
                     const h2_idx = { x: hand2[8].x, y: hand2[8].y };
                     const h2_thb = { x: hand2[4].x, y: hand2[4].y };
 
-                    // Proximity check for touch trigger
-                    const indexDist = Math.hypot(h1_idx.x - h2_idx.x, h1_idx.y - h2_idx.y);
-                    const thumbDist = Math.hypot(h1_thb.x - h2_thb.x, h1_thb.y - h2_thb.y);
-                    const crossDist1 = Math.hypot(h1_idx.x - h2_thb.x, h1_idx.y - h2_thb.y);
-                    const crossDist2 = Math.hypot(h1_thb.x - h2_idx.x, h1_thb.y - h2_idx.y);
+                    // Exact finger contact checks (Index-to-Index, Thumb-to-Thumb, or Index-to-Thumb)
+                    const indexContact = Math.hypot(h1_idx.x - h2_idx.x, h1_idx.y - h2_idx.y);
+                    const thumbContact = Math.hypot(h1_thb.x - h2_thb.x, h1_thb.y - h2_thb.y);
+                    const crossContact1 = Math.hypot(h1_idx.x - h2_thb.x, h1_idx.y - h2_thb.y);
+                    const crossContact2 = Math.hypot(h1_thb.x - h2_idx.x, h1_thb.y - h2_idx.y);
 
-                    const CONTACT_THRESHOLD = 0.18;
-                    const isContactMade = indexDist < CONTACT_THRESHOLD || 
-                                          thumbDist < CONTACT_THRESHOLD || 
-                                          crossDist1 < CONTACT_THRESHOLD || 
-                                          crossDist2 < CONTACT_THRESHOLD;
+                    // Touch threshold requirement
+                    const TOUCH_THRESHOLD = 0.12; 
+                    const isTouching = indexContact < TOUCH_THRESHOLD || 
+                                       thumbContact < TOUCH_THRESHOLD || 
+                                       crossContact1 < TOUCH_THRESHOLD || 
+                                       crossContact2 < TOUCH_THRESHOLD;
 
-                    if (isContactMade) {
-                        statusElem.innerText = `🟣 PORTAL OPEN (${currentTheme.name})`;
+                    if (isTouching) {
+                        statusElem.innerText = `🟣 PORTAL ACTIVE (${currentTheme.name})`;
 
                         const p1 = { x: h1_idx.x * w, y: h1_idx.y * h };
                         const p2 = { x: h2_idx.x * w, y: h2_idx.y * h };
@@ -263,7 +282,7 @@
                         canvasCtx.lineWidth = 2;
                         canvasCtx.stroke();
                     } else {
-                        statusElem.innerText = "👉 TOUCH FINGERS TO CONNECT";
+                        statusElem.innerText = "👉 TOUCH FINGER TIPS TO CONNECT";
                     }
                 } else {
                     statusElem.innerText = "🟣 WAITING FOR 2 HANDS";
@@ -281,19 +300,31 @@
 
         startBtn.addEventListener('click', async () => {
             try {
+                // Request both video and audio streams
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-                    audio: false
+                    audio: true
                 });
                 videoElement.srcObject = stream;
                 await videoElement.play();
                 startOverlay.style.display = 'none';
                 
-                // Activate Speech Control & Video Loop
                 initVoiceCommands();
                 processVideo();
             } catch (err) {
-                alert('Camera permission required: ' + err.message);
+                // Fallback to video only if mic permissions are blocked by the OS
+                try {
+                    const videoOnlyStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                        audio: false
+                    });
+                    videoElement.srcObject = videoOnlyStream;
+                    await videoElement.play();
+                    startOverlay.style.display = 'none';
+                    processVideo();
+                } catch(videoErr) {
+                    alert('Camera access error: ' + videoErr.message);
+                }
             }
         });
     </script>
