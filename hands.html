@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Couples Purple Portal</title>
+    <title>Hand Portal</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -16,9 +16,17 @@
         video { display: none; }
         canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
         
+        /* Camera Flash Effect */
+        #flash-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0; pointer-events: none; z-index: 200;
+            transition: opacity 0.2s ease-out;
+        }
+
+        /* Tap to start screen */
         #start-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9); display: flex; flex-direction: column;
+            background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: #fff; text-align: center;
         }
         #start-btn {
@@ -26,17 +34,58 @@
             color: #fff; border: none; border-radius: 30px; box-shadow: 0 0 15px #ff00ff;
             cursor: pointer; margin-top: 15px; font-family: monospace;
         }
-        #status { position: absolute; top: 15px; left: 20px; color: #ff00ff; font-size: 16px; z-index: 10; text-shadow: 0 0 8px #ff00ff; }
+        
+        /* UI Status & Voice Indicator */
+        #ui-bar {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+        #status-container { display: flex; flex-direction: column; gap: 4px; }
+        #status {
+            color: #ff00ff; font-size: 14px; text-shadow: 0 0 8px #ff00ff;
+            background: rgba(0, 0, 0, 0.6); padding: 8px 12px; border-radius: 8px;
+        }
+        #voice-status {
+            color: #00ffff; font-size: 11px; text-shadow: 0 0 6px #00ffff;
+            background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 6px; width: fit-content;
+        }
+
+        /* Color Picker Buttons */
+        .color-picker {
+            display: flex; gap: 8px; pointer-events: auto;
+            background: rgba(0, 0, 0, 0.6); padding: 6px 10px; border-radius: 20px;
+        }
+        .color-btn {
+            width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff;
+            cursor: pointer; transition: transform 0.2s;
+        }
+        .color-btn:active { transform: scale(1.2); }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="status">🟣 COUPLES PORTAL READY</div>
+        <div id="flash-overlay"></div>
+
+        <div id="ui-bar">
+            <div id="status-container">
+                <div id="status">🟣 READY - BRING 2 HANDS</div>
+                <div id="voice-status">🗣️ VOICE: SAY "SHOT" OR "CHANGE"</div>
+            </div>
+            <div class="color-picker">
+                <div class="color-btn" style="background: #ff00ff;" onclick="setTheme('neon')"></div>
+                <div class="color-btn" style="background: #8a2be2;" onclick="setTheme('deep')"></div>
+                <div class="color-btn" style="background: #e0b0ff;" onclick="setTheme('lavender')"></div>
+                <div class="color-btn" style="background: #4b0082;" onclick="setTheme('indigo')"></div>
+            </div>
+        </div>
+
         <div id="start-overlay">
             <h2>Couples Portal</h2>
-            <p>Tap below to start the camera</p>
-            <button id="start-btn">ENABLE CAMERA</button>
+            <p>Say <b>"SHOT"</b> to take photo | Say <b>"CHANGE"</b> for colors</p>
+            <button id="start-btn">ENABLE CAMERA & MIC</button>
         </div>
+
         <video id="webcam" playsinline autoplay muted></video>
         <canvas id="output_canvas"></canvas>
     </div>
@@ -47,6 +96,93 @@
         const canvasCtx = canvasElement.getContext('2d');
         const startOverlay = document.getElementById('start-overlay');
         const startBtn = document.getElementById('start-btn');
+        const statusElem = document.getElementById('status');
+        const voiceStatusElem = document.getElementById('voice-status');
+        const flashOverlay = document.getElementById('flash-overlay');
+
+        // Color Themes
+        const themeKeys = ['neon', 'deep', 'lavender', 'indigo'];
+        let currentThemeIdx = 0;
+
+        const themes = {
+            neon:     { stroke: 'rgba(255, 0, 255, 0.9)',   fill: 'rgba(255, 0, 255, 0.35)',  glow: '#ff00ff', name: 'ELECTRIC NEON' },
+            deep:     { stroke: 'rgba(138, 43, 226, 0.9)',  fill: 'rgba(138, 43, 226, 0.35)', glow: '#8a2be2', name: 'DEEP CYBER' },
+            lavender: { stroke: 'rgba(224, 176, 255, 0.9)', fill: 'rgba(224, 176, 255, 0.35)', glow: '#e0b0ff', name: 'SOFT LAVENDER' },
+            indigo:   { stroke: 'rgba(75, 0, 130, 0.9)',    fill: 'rgba(75, 0, 130, 0.45)',   glow: '#4b0082', name: 'COSMIC INDIGO' }
+        };
+        let currentTheme = themes.neon;
+
+        function setTheme(key) {
+            currentTheme = themes[key];
+            currentThemeIdx = themeKeys.indexOf(key);
+            statusElem.style.color = currentTheme.glow;
+            statusElem.style.textShadow = `0 0 8px ${currentTheme.glow}`;
+        }
+
+        function cycleTheme() {
+            currentThemeIdx = (currentThemeIdx + 1) % themeKeys.length;
+            setTheme(themeKeys[currentThemeIdx]);
+            voiceStatusElem.innerText = `🎨 CHANGED TO: ${currentTheme.name}`;
+            setTimeout(() => {
+                voiceStatusElem.innerText = '🗣️ VOICE: SAY "SHOT" OR "CHANGE"';
+            }, 2500);
+        }
+
+        // Take Picture Action
+        function takeSnapshot() {
+            // Screen Flash
+            flashOverlay.style.opacity = '1';
+            setTimeout(() => { flashOverlay.style.opacity = '0'; }, 200);
+
+            voiceStatusElem.innerText = "📸 SNAPSHOT CAPTURED!";
+
+            // Generate Download Link
+            const image = canvasElement.toDataURL("image/png");
+            const link = document.createElement('a');
+            link.download = `couples-portal-${Date.now()}.png`;
+            link.href = image;
+            link.click();
+
+            setTimeout(() => {
+                voiceStatusElem.innerText = '🗣️ VOICE: SAY "SHOT" OR "CHANGE"';
+            }, 2500);
+        }
+
+        // Voice Recognition Setup
+        function initVoiceCommands() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                voiceStatusElem.innerText = "⚠️ VOICE NOT SUPPORTED ON THIS BROWSER";
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                const lastIdx = event.results.length - 1;
+                const command = event.results[lastIdx][0].transcript.trim().toLowerCase();
+
+                if (command.includes('shot') || command.includes('shoot') || command.includes('snap')) {
+                    takeSnapshot();
+                } else if (command.includes('change') || command.includes('switch') || command.includes('color')) {
+                    cycleTheme();
+                }
+            };
+
+            recognition.onerror = (err) => {
+                console.log("Voice err:", err);
+            };
+
+            recognition.onend = () => {
+                // Keep microphone active continuously
+                try { recognition.start(); } catch(e) {}
+            };
+
+            try { recognition.start(); } catch(e) {}
+        }
 
         function resizeCanvas() {
             canvasElement.width = window.innerWidth;
@@ -55,13 +191,14 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
+        // Optimized MediaPipe Tracking
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
 
         hands.setOptions({
             maxNumHands: 2,
-            modelComplexity: 1,
+            modelComplexity: 0,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
@@ -83,26 +220,53 @@
                     const w = canvasElement.width;
                     const h = canvasElement.height;
 
-                    const h1_idx = { x: hand1[8].x * w, y: hand1[8].y * h };
-                    const h1_thb = { x: hand1[4].x * w, y: hand1[4].y * h };
-                    const h2_idx = { x: hand2[8].x * w, y: hand2[8].y * h };
-                    const h2_thb = { x: hand2[4].x * w, y: hand2[4].y * h };
+                    const h1_idx = { x: hand1[8].x, y: hand1[8].y };
+                    const h1_thb = { x: hand1[4].x, y: hand1[4].y };
+                    const h2_idx = { x: hand2[8].x, y: hand2[8].y };
+                    const h2_thb = { x: hand2[4].x, y: hand2[4].y };
 
-                    canvasCtx.beginPath();
-                    canvasCtx.moveTo(h1_idx.x, h1_idx.y);
-                    canvasCtx.lineTo(h2_idx.x, h2_idx.y);
-                    canvasCtx.lineTo(h2_thb.x, h2_thb.y);
-                    canvasCtx.lineTo(h1_thb.x, h1_thb.y);
-                    canvasCtx.closePath();
+                    // Proximity check for touch trigger
+                    const indexDist = Math.hypot(h1_idx.x - h2_idx.x, h1_idx.y - h2_idx.y);
+                    const thumbDist = Math.hypot(h1_thb.x - h2_thb.x, h1_thb.y - h2_thb.y);
+                    const crossDist1 = Math.hypot(h1_idx.x - h2_thb.x, h1_idx.y - h2_thb.y);
+                    const crossDist2 = Math.hypot(h1_thb.x - h2_idx.x, h1_thb.y - h2_idx.y);
 
-                    canvasCtx.strokeStyle = 'rgba(255, 0, 255, 1)';
-                    canvasCtx.lineWidth = 4;
-                    canvasCtx.shadowColor = '#ff00ff';
-                    canvasCtx.shadowBlur = 12;
-                    canvasCtx.stroke();
+                    const CONTACT_THRESHOLD = 0.18;
+                    const isContactMade = indexDist < CONTACT_THRESHOLD || 
+                                          thumbDist < CONTACT_THRESHOLD || 
+                                          crossDist1 < CONTACT_THRESHOLD || 
+                                          crossDist2 < CONTACT_THRESHOLD;
 
-                    canvasCtx.fillStyle = 'rgba(255, 0, 255, 0.35)';
-                    canvasCtx.fill();
+                    if (isContactMade) {
+                        statusElem.innerText = `🟣 PORTAL OPEN (${currentTheme.name})`;
+
+                        const p1 = { x: h1_idx.x * w, y: h1_idx.y * h };
+                        const p2 = { x: h2_idx.x * w, y: h2_idx.y * h };
+                        const p3 = { x: h2_thb.x * w, y: h2_thb.y * h };
+                        const p4 = { x: h1_thb.x * w, y: h1_thb.y * h };
+
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo(p1.x, p1.y);
+                        canvasCtx.lineTo(p2.x, p2.y);
+                        canvasCtx.lineTo(p3.x, p3.y);
+                        canvasCtx.lineTo(p4.x, p4.y);
+                        canvasCtx.closePath();
+
+                        canvasCtx.fillStyle = currentTheme.fill;
+                        canvasCtx.fill();
+
+                        canvasCtx.strokeStyle = currentTheme.stroke;
+                        canvasCtx.lineWidth = 6;
+                        canvasCtx.stroke();
+
+                        canvasCtx.strokeStyle = '#FFFFFF';
+                        canvasCtx.lineWidth = 2;
+                        canvasCtx.stroke();
+                    } else {
+                        statusElem.innerText = "👉 TOUCH FINGERS TO CONNECT";
+                    }
+                } else {
+                    statusElem.innerText = "🟣 WAITING FOR 2 HANDS";
                 }
             }
             canvasCtx.restore();
@@ -118,157 +282,18 @@
         startBtn.addEventListener('click', async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
                 });
                 videoElement.srcObject = stream;
                 await videoElement.play();
                 startOverlay.style.display = 'none';
+                
+                // Activate Speech Control & Video Loop
+                initVoiceCommands();
                 processVideo();
             } catch (err) {
-                alert('Camera Error: Please make sure you are using HTTPS and granted permission. Details: ' + err.message);
-            }
-        });
-    </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Couples Purple Portal</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: monospace; }
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        video { display: none; }
-        canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        
-        #start-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100; color: #fff; text-align: center;
-        }
-        #start-btn {
-            padding: 16px 32px; font-size: 18px; font-weight: bold; background: #ff00ff;
-            color: #fff; border: none; border-radius: 30px; box-shadow: 0 0 15px #ff00ff;
-            cursor: pointer; margin-top: 15px; font-family: monospace;
-        }
-        #status { position: absolute; top: 15px; left: 20px; color: #ff00ff; font-size: 16px; z-index: 10; text-shadow: 0 0 8px #ff00ff; }
-    </style>
-</head>
-<body>
-    <div id="container">
-        <div id="status">PORTAL READY</div>
-        <div id="start-overlay">
-            <h2>Couples Portal</h2>
-            <p>Tap below to start the camera</p>
-            <button id="start-btn">ENABLE CAMERA</button>
-        </div>
-        <video id="webcam" playsinline autoplay muted></video>
-        <canvas id="output_canvas"></canvas>
-    </div>
-
-    <script>
-        const videoElement = document.getElementById('webcam');
-        const canvasElement = document.getElementById('output_canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-        const startOverlay = document.getElementById('start-overlay');
-        const startBtn = document.getElementById('start-btn');
-
-        function resizeCanvas() {
-            canvasElement.width = window.innerWidth;
-            canvasElement.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        hands.onResults((results) => {
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-            if (results.multiHandLandmarks) {
-                for (const landmarks of results.multiHandLandmarks) {
-                    drawLandmarks(canvasCtx, landmarks, {color: '#FFFFFF', lineWidth: 1, radius: 2});
-                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 1});
-                }
-
-                if (results.multiHandLandmarks.length === 2) {
-                    const hand1 = results.multiHandLandmarks[0];
-                    const hand2 = results.multiHandLandmarks[1];
-                    const w = canvasElement.width;
-                    const h = canvasElement.height;
-
-                    const h1_idx = { x: hand1[8].x * w, y: hand1[8].y * h };
-                    const h1_thb = { x: hand1[4].x * w, y: hand1[4].y * h };
-                    const h2_idx = { x: hand2[8].x * w, y: hand2[8].y * h };
-                    const h2_thb = { x: hand2[4].x * w, y: hand2[4].y * h };
-
-                    canvasCtx.beginPath();
-                    canvasCtx.moveTo(h1_idx.x, h1_idx.y);
-                    canvasCtx.lineTo(h2_idx.x, h2_idx.y);
-                    canvasCtx.lineTo(h2_thb.x, h2_thb.y);
-                    canvasCtx.lineTo(h1_thb.x, h1_thb.y);
-                    canvasCtx.closePath();
-
-                    canvasCtx.strokeStyle = 'rgba(255, 0, 255, 1)';
-                    canvasCtx.lineWidth = 4;
-                    canvasCtx.shadowColor = '#ff00ff';
-                    canvasCtx.shadowBlur = 12;
-                    canvasCtx.stroke();
-
-                    canvasCtx.fillStyle = 'rgba(255, 0, 255, 0.35)';
-                    canvasCtx.fill();
-                }
-            }
-            canvasCtx.restore();
-        });
-
-        async function processVideo() {
-            if (!videoElement.paused && !videoElement.ended) {
-                await hands.send({ image: videoElement });
-            }
-            requestAnimationFrame(processVideo);
-        }
-
-        startBtn.addEventListener('click', async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'user',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
-                    audio: false
-                });
-                videoElement.srcObject = stream;
-                await videoElement.play();
-                startOverlay.style.display = 'none';
-                processVideo();
-            } catch (err) {
-                alert('Camera Error: Please make sure you are using HTTPS and granted permission. Details: ' + err.message);
+                alert('Camera permission required: ' + err.message);
             }
         });
     </script>
